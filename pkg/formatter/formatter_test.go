@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pascal71/lhcli/pkg/utils"
 )
 
 // Test data structures
@@ -171,7 +173,7 @@ func TestHelpers(t *testing.T) {
 		}
 
 		for _, test := range tests {
-			result := TruncateString(test.input, test.maxLen)
+			result := utils.TruncateString(test.input, test.maxLen)
 			if result != test.expected {
 				t.Errorf("TruncateString(%s, %d) = %s, want %s",
 					test.input, test.maxLen, result, test.expected)
