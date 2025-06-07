@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"lhcli/cmd"
+	"github.com/pascal71/lhcli/cmd"
 )
 
 func main() {

@@ -78,7 +78,7 @@ func (c *crdVolumeClient) Create(input *VolumeCreateInput) (*Volume, error) {
 	// Set spec
 	spec := map[string]interface{}{
 		"size":             input.Size,
-		"numberOfReplicas": input.NumberOfReplicas,
+		"numberOfReplicas": int64(input.NumberOfReplicas), // Convert to int64
 	}
 
 	if input.Frontend != "" {

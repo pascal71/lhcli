@@ -1,0 +1,45 @@
+# First, check if it runs
+./lhcli --help
+
+# Test node commands
+echo "=== Testing Node Commands ==="
+./lhcli node list
+./lhcli node get rpb58-n34
+./lhcli node list -o wide
+./lhcli node list -o json | jq '.[] | {name: .name, status: .conditions.Ready.status}'
+
+# Test node scheduling
+echo -e "\n=== Testing Node Scheduling ==="
+./lhcli node scheduling disable k3sc004n01
+./lhcli node list
+./lhcli node scheduling enable k3sc004n01
+
+# Test node tags
+echo -e "\n=== Testing Node Tags ==="
+./lhcli node tag add rpb58-n34 test
+./lhcli node get rpb58-n34 | grep Tags
+./lhcli node tag remove rpb58-n34 test
+
+# Test volume commands
+echo -e "\n=== Testing Volume Commands ==="
+./lhcli volume list
+
+# Create a test volume
+echo -e "\n=== Creating Test Volume ==="
+./lhcli volume create test-cli-vol --size 2Gi --replicas 2
+
+# List volumes again
+./lhcli volume list
+
+# Get volume details
+./lhcli volume get test-cli-vol
+
+# Test wide output
+./lhcli volume list -o wide
+
+# Test JSON output
+./lhcli volume list -o json | jq '.[] | {name: .name, size: .size, replicas: .numberOfReplicas}'
+
+# Delete the test volume (with confirmation)
+echo -e "\n=== Deleting Test Volume ==="
+./lhcli volume delete test-cli-vol --force
