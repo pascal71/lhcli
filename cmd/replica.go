@@ -55,6 +55,12 @@ func init() {
 	// Replica list flags
 	replicaListCmd.Flags().StringVar(&volumeFilter, "volume", "", "Filter replicas by volume name")
 	replicaListCmd.Flags().StringVar(&nodeFilter, "node", "", "Filter replicas by node")
+	replicaListCmd.Flags().
+		Bool("full-ids", false, "Show full replica names and disk IDs without abbreviation")
+
+	// Replica get flags
+	replicaGetCmd.Flags().
+		Bool("full-ids", false, "Show full disk IDs without abbreviation")
 
 	// Replica delete flags
 	replicaDeleteCmd.Flags().Bool("force", false, "Force delete without confirmation")
@@ -83,6 +89,9 @@ func runReplicaList(cmd *cobra.Command, args []string) error {
 		filteredReplicas = append(filteredReplicas, replica)
 	}
 
+	// Get the showFullIDs flag value
+	showFullIDs, _ := cmd.Flags().GetBool("full-ids")
+
 	// Handle output format
 	switch output {
 	case "json":
@@ -90,9 +99,9 @@ func runReplicaList(cmd *cobra.Command, args []string) error {
 	case "yaml":
 		return formatter.NewYAMLFormatter().Format(filteredReplicas)
 	case "wide":
-		return printReplicasWide(filteredReplicas)
+		return printReplicasWide(filteredReplicas, showFullIDs)
 	default:
-		return printReplicasTable(filteredReplicas)
+		return printReplicasTable(filteredReplicas, showFullIDs)
 	}
 }
 
@@ -109,6 +118,9 @@ func runReplicaGet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get replica: %w", err)
 	}
 
+	// Get the showFullIDs flag value
+	showFullIDs, _ := cmd.Flags().GetBool("full-ids")
+
 	// Handle output format
 	switch output {
 	case "json":
@@ -116,7 +128,7 @@ func runReplicaGet(cmd *cobra.Command, args []string) error {
 	case "yaml":
 		return formatter.NewYAMLFormatter().Format(replica)
 	default:
-		return printReplicaDetails(replica)
+		return printReplicaDetails(replica, showFullIDs)
 	}
 }
 
@@ -158,18 +170,18 @@ func runReplicaDelete(cmd *cobra.Command, args []string) error {
 
 // Helper functions for printing
 
-func printReplicasTable(replicas []client.Replica) error {
+func printReplicasTable(replicas []client.Replica, showFullIDs bool) error {
 	headers := []string{"NAME", "VOLUME", "NODE", "DISK PATH", "SIZE", "STATE"}
 	formatter := formatter.NewTableFormatter(headers)
 
 	for _, replica := range replicas {
 		name := replica.Name
-		if len(name) > 40 {
+		if !showFullIDs && len(name) > 40 {
 			name = name[:37] + "..."
 		}
 
 		volumeName := replica.VolumeName
-		if len(volumeName) > 30 {
+		if !showFullIDs && len(volumeName) > 30 {
 			volumeName = volumeName[:27] + "..."
 		}
 
@@ -191,7 +203,7 @@ func printReplicasTable(replicas []client.Replica) error {
 	return formatter.Format(nil)
 }
 
-func printReplicasWide(replicas []client.Replica) error {
+func printReplicasWide(replicas []client.Replica, showFullIDs bool) error {
 	headers := []string{
 		"NAME",
 		"VOLUME",
@@ -212,7 +224,7 @@ func printReplicasWide(replicas []client.Replica) error {
 		}
 
 		diskID := replica.DiskID
-		if len(diskID) > 20 {
+		if !showFullIDs && len(diskID) > 20 {
 			diskID = diskID[:17] + "..."
 		}
 
@@ -232,11 +244,17 @@ func printReplicasWide(replicas []client.Replica) error {
 	return formatter.Format(nil)
 }
 
-func printReplicaDetails(replica *client.Replica) error {
+func printReplicaDetails(replica *client.Replica, showFullIDs bool) error {
 	fmt.Printf("Name:              %s\n", replica.Name)
 	fmt.Printf("Volume:            %s\n", replica.VolumeName)
 	fmt.Printf("Node:              %s\n", replica.NodeID)
-	fmt.Printf("Disk ID:           %s\n", replica.DiskID)
+
+	diskID := replica.DiskID
+	if !showFullIDs && len(diskID) > 60 {
+		diskID = diskID[:57] + "..."
+	}
+	fmt.Printf("Disk ID:           %s\n", diskID)
+
 	fmt.Printf("Disk Path:         %s\n", replica.DiskPath)
 	fmt.Printf("Data Path:         %s\n", replica.DataPath)
 	fmt.Printf("State:             %s\n", replica.Mode)
