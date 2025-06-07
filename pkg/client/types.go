@@ -68,27 +68,29 @@ type DiskUpdate struct {
 }
 
 // Volume represents a Longhorn volume
+// In pkg/client/types.go, update the Volume struct to include ActualSize:
+
+// Volume represents a Longhorn volume
 type Volume struct {
 	Name             string            `json:"name"`
 	Namespace        string            `json:"namespace,omitempty"`
 	Size             string            `json:"size"`
-	Frontend         string            `json:"frontend"`
+	ActualSize       int64             `json:"actualSize,omitempty"` // Add this field
+	NumberOfReplicas int               `json:"numberOfReplicas"`
 	State            string            `json:"state"`
 	Robustness       string            `json:"robustness"`
-	NumberOfReplicas int               `json:"numberOfReplicas"`
+	Frontend         string            `json:"frontend"`
 	DataLocality     string            `json:"dataLocality"`
 	AccessMode       string            `json:"accessMode"`
 	Migratable       bool              `json:"migratable"`
 	Encrypted        bool              `json:"encrypted"`
-	Created          string            `json:"created"`
 	Image            string            `json:"image"`
 	LastBackup       string            `json:"lastBackup"`
 	LastBackupAt     string            `json:"lastBackupAt"`
-	ScheduledReplica map[string]int64  `json:"scheduledReplica"`
-	Controllers      []Controller      `json:"controllers"`
-	Replicas         []Replica         `json:"replicas"`
-	Labels           map[string]string `json:"labels"`
+	Created          string            `json:"created"`
 	Conditions       map[string]Status `json:"conditions"`
+	Replicas         []Replica         `json:"replicas"`
+	Labels           map[string]string `json:"labels,omitempty"`
 }
 
 // VolumeCreateInput represents volume creation parameters
@@ -133,15 +135,24 @@ type Controller struct {
 
 // Replica represents a volume replica
 type Replica struct {
-	Name                string `json:"name"`
-	NodeID              string `json:"nodeID"`
-	DiskID              string `json:"diskID"`
-	DiskPath            string `json:"diskPath"`
-	DataPath            string `json:"dataPath"`
-	Mode                string `json:"mode"`
-	FailedAt            string `json:"failedAt"`
-	CurrentImage        string `json:"currentImage"`
-	InstanceManagerName string `json:"instanceManagerName"`
+	Name            string            `json:"name"`
+	NodeID          string            `json:"nodeID"`
+	DiskID          string            `json:"diskID"`
+	DiskPath        string            `json:"diskPath,omitempty"` // Add this field
+	DataPath        string            `json:"dataPath"`
+	Mode            string            `json:"mode"`
+	FailedAt        string            `json:"failedAt"`
+	Running         bool              `json:"running"`
+	SpecSize        string            `json:"specSize"`
+	ActualSize      string            `json:"actualSize"`
+	IP              string            `json:"ip"`
+	Port            int               `json:"port"`
+	InstanceManager string            `json:"instanceManager"`
+	Image           string            `json:"image"`
+	StorageIP       string            `json:"storageIP"`
+	StoragePort     int               `json:"storagePort"`
+	DataEngine      string            `json:"dataEngine"`
+	Conditions      map[string]Status `json:"conditions"`
 }
 
 // Setting represents a Longhorn setting

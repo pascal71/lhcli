@@ -6,10 +6,11 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+
 	"github.com/pascal71/lhcli/pkg/client"
 	"github.com/pascal71/lhcli/pkg/formatter"
 	"github.com/pascal71/lhcli/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 var nodeCmd = &cobra.Command{
@@ -108,6 +109,23 @@ var nodeDiskUpdateCmd = &cobra.Command{
 	RunE:  runNodeDiskUpdate,
 }
 
+var nodeDiskEnableCmd = &cobra.Command{
+	Use:   "enable [node-name] [disk-id]",
+	Short: "Enable scheduling on a disk",
+	Long:  `Enable scheduling on a disk to allow Longhorn to place new replicas on it.`,
+	Args:  cobra.ExactArgs(2),
+	RunE:  runNodeDiskEnable,
+}
+
+var nodeDiskDisableCmd = &cobra.Command{
+	Use:   "disable [node-name] [disk-id]",
+	Short: "Disable scheduling on a disk",
+	Long: `Disable scheduling on a disk. This prevents Longhorn from placing new replicas on the disk.
+Existing replicas will remain but should be migrated before removing the disk.`,
+	Args: cobra.ExactArgs(2),
+	RunE: runNodeDiskDisable,
+}
+
 func init() {
 	rootCmd.AddCommand(nodeCmd)
 
@@ -131,6 +149,8 @@ func init() {
 	nodeDiskCmd.AddCommand(nodeDiskAddCmd)
 	nodeDiskCmd.AddCommand(nodeDiskRemoveCmd)
 	nodeDiskCmd.AddCommand(nodeDiskUpdateCmd)
+	nodeDiskCmd.AddCommand(nodeDiskEnableCmd)
+	nodeDiskCmd.AddCommand(nodeDiskDisableCmd)
 
 	// Node evict flags
 	nodeEvictCmd.Flags().Bool("force", false, "Force eviction without confirmation")
@@ -353,6 +373,43 @@ func runNodeDiskUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("✓ Disk %s updated on node %s\n", diskID, nodeName)
+	return nil
+}
+
+func runNodeDiskEnable(cmd *cobra.Command, args []string) error {
+	nodeName := args[0]
+	diskID := args[1]
+
+	c, err := getClient()
+	if err != nil {
+		return err
+	}
+
+	if err := c.Nodes().EnableDiskScheduling(nodeName, diskID); err != nil {
+		return fmt.Errorf("failed to enable disk: %w", err)
+	}
+
+	fmt.Printf("✓ Scheduling enabled for disk %s on node %s\n", diskID, nodeName)
+	return nil
+}
+
+func runNodeDiskDisable(cmd *cobra.Command, args []string) error {
+	nodeName := args[0]
+	diskID := args[1]
+
+	c, err := getClient()
+	if err != nil {
+		return err
+	}
+
+	if err := c.Nodes().DisableDiskScheduling(nodeName, diskID); err != nil {
+		return fmt.Errorf("failed to disable disk: %w", err)
+	}
+
+	fmt.Printf("✓ Scheduling disabled for disk %s on node %s\n", diskID, nodeName)
+	fmt.Println(
+		"  Note: Existing replicas will remain. Wait for them to be migrated before removing the disk.",
+	)
 	return nil
 }
 

@@ -25,7 +25,7 @@ func (c *Client) VolumesCRD() VolumeInterface {
 	return nil
 }
 
-// List returns all Longhorn volumes
+// List returns all Longhorn volumes with their replicas
 func (c *crdVolumeClient) List() ([]Volume, error) {
 	debugLog("Listing Longhorn volumes via CRD")
 
@@ -46,10 +46,45 @@ func (c *crdVolumeClient) List() ([]Volume, error) {
 		volumes = append(volumes, *volume)
 	}
 
+	// Fetch all replicas and map them to volumes
+	debugLog("Fetching replicas for volumes")
+	replicaList, err := c.crdClient.dynamicClient.Resource(replicaGVR).
+		Namespace(c.crdClient.namespace).
+		List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		debugLog("Warning: failed to list replicas: %v", err)
+		// Don't fail completely if we can't get replicas
+		return volumes, nil
+	}
+
+	debugLog("Found %d replicas", len(replicaList.Items))
+
+	// Create a map of volume name to replicas
+	volumeReplicas := make(map[string][]Replica)
+	for _, item := range replicaList.Items {
+		replica, volumeName, err := unstructuredToReplica(&item)
+		if err != nil {
+			debugLog("Failed to convert replica %s: %v", item.GetName(), err)
+			continue
+		}
+		if volumeName != "" {
+			debugLog("Adding replica %s to volume %s", replica.Name, volumeName)
+			volumeReplicas[volumeName] = append(volumeReplicas[volumeName], *replica)
+		}
+	}
+
+	// Assign replicas to volumes
+	for i := range volumes {
+		if replicas, ok := volumeReplicas[volumes[i].Name]; ok {
+			debugLog("Assigning %d replicas to volume %s", len(replicas), volumes[i].Name)
+			volumes[i].Replicas = replicas
+		}
+	}
+
 	return volumes, nil
 }
 
-// Get returns a specific volume
+// Get returns a specific volume with its replicas
 func (c *crdVolumeClient) Get(name string) (*Volume, error) {
 	debugLog("Getting Longhorn volume %s via CRD", name)
 
@@ -60,7 +95,37 @@ func (c *crdVolumeClient) Get(name string) (*Volume, error) {
 		return nil, fmt.Errorf("failed to get volume %s: %w", name, err)
 	}
 
-	return unstructuredToVolume(unstructuredVolume)
+	volume, err := unstructuredToVolume(unstructuredVolume)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch replicas for this volume
+	debugLog("Fetching replicas for volume %s", name)
+	replicaList, err := c.crdClient.dynamicClient.Resource(replicaGVR).
+		Namespace(c.crdClient.namespace).
+		List(context.TODO(), metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("longhornvolume=%s", name),
+		})
+	if err != nil {
+		debugLog("Warning: failed to list replicas for volume %s: %v", name, err)
+		// Don't fail completely if we can't get replicas
+		return volume, nil
+	}
+
+	debugLog("Found %d replicas for volume %s", len(replicaList.Items), name)
+
+	volume.Replicas = make([]Replica, 0)
+	for _, item := range replicaList.Items {
+		replica, _, err := unstructuredToReplica(&item)
+		if err != nil {
+			debugLog("Failed to convert replica %s: %v", item.GetName(), err)
+			continue
+		}
+		volume.Replicas = append(volume.Replicas, *replica)
+	}
+
+	return volume, nil
 }
 
 // Create creates a new volume
@@ -309,6 +374,12 @@ func unstructuredToVolume(u *unstructured.Unstructured) (*Volume, error) {
 		if v, ok := status["lastBackupAt"].(string); ok {
 			volume.LastBackupAt = v
 		}
+		// Get actual size from status
+		if v, ok := status["actualSize"].(int64); ok {
+			volume.ActualSize = v
+		} else if v, ok := status["actualSize"].(float64); ok {
+			volume.ActualSize = int64(v)
+		}
 
 		// Get conditions
 		if conditions, ok := status["conditions"].([]interface{}); ok {
@@ -338,30 +409,102 @@ func unstructuredToVolume(u *unstructured.Unstructured) (*Volume, error) {
 				}
 			}
 		}
+	}
 
-		// Get replicas
-		if replicas, ok := status["replicas"].([]interface{}); ok {
-			volume.Replicas = make([]Replica, 0, len(replicas))
-			for _, repData := range replicas {
-				if repMap, ok := repData.(map[string]interface{}); ok {
-					replica := Replica{}
-					if v, ok := repMap["name"].(string); ok {
-						replica.Name = v
-					}
-					if v, ok := repMap["nodeID"].(string); ok {
-						replica.NodeID = v
-					}
-					if v, ok := repMap["diskID"].(string); ok {
-						replica.DiskID = v
-					}
-					if v, ok := repMap["mode"].(string); ok {
-						replica.Mode = v
-					}
-					volume.Replicas = append(volume.Replicas, replica)
-				}
-			}
+	// Replicas will be fetched separately
+	volume.Replicas = make([]Replica, 0)
+
+	return volume, nil
+}
+
+// Helper function to convert unstructured to Replica
+func unstructuredToReplica(u *unstructured.Unstructured) (*Replica, string, error) {
+	replica := &Replica{
+		Name: u.GetName(),
+	}
+
+	var volumeName string
+
+	// Get spec
+	if spec, found, err := unstructured.NestedMap(u.Object, "spec"); err == nil && found {
+		// Get volume name from spec
+		if v, ok := spec["volumeName"].(string); ok {
+			volumeName = v
+		}
+		// Get node ID from spec
+		if v, ok := spec["nodeID"].(string); ok {
+			replica.NodeID = v
+		}
+		// Get disk ID from spec
+		if v, ok := spec["diskID"].(string); ok {
+			replica.DiskID = v
+		}
+		// Get disk path from spec
+		if v, ok := spec["diskPath"].(string); ok {
+			replica.DiskPath = v
+		}
+		// Get data directory name
+		if v, ok := spec["dataDirectoryName"].(string); ok {
+			replica.DataPath = v
+		}
+		// Get failed at
+		if v, ok := spec["failedAt"].(string); ok {
+			replica.FailedAt = v
+		}
+		// Get data engine
+		if v, ok := spec["dataEngine"].(string); ok {
+			replica.DataEngine = v
+		}
+		// Get image
+		if v, ok := spec["image"].(string); ok {
+			replica.Image = v
 		}
 	}
 
-	return volume, nil
+	// Get status
+	if status, found, err := unstructured.NestedMap(u.Object, "status"); err == nil && found {
+		// Get instance manager name
+		if v, ok := status["instanceManagerName"].(string); ok {
+			replica.InstanceManager = v
+		}
+		// Get current state (this is the mode)
+		if v, ok := status["currentState"].(string); ok {
+			replica.Mode = v
+		}
+		// Get IP
+		if v, ok := status["ip"].(string); ok {
+			replica.IP = v
+		}
+		// Get port
+		if v, ok := status["port"].(int64); ok {
+			replica.Port = int(v)
+		} else if v, ok := status["port"].(float64); ok {
+			replica.Port = int(v)
+		}
+		// Get started status (running)
+		if v, ok := status["started"].(bool); ok {
+			replica.Running = v
+		}
+		// Get storage IP
+		if v, ok := status["storageIP"].(string); ok {
+			replica.StorageIP = v
+		}
+		// Get current image
+		if v, ok := status["currentImage"].(string); ok {
+			// Override with current image if available
+			replica.Image = v
+		}
+	}
+
+	// Get labels to find the volume name if not in spec
+	if volumeName == "" {
+		labels := u.GetLabels()
+		if v, ok := labels["longhornvolume"]; ok {
+			volumeName = v
+		}
+	}
+
+	debugLog("Converted replica %s for volume %s", replica.Name, volumeName)
+
+	return replica, volumeName, nil
 }

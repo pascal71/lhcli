@@ -156,6 +156,8 @@ type NodeInterface interface {
 	UpdateDiskTags(nodeName, diskID string, tags []string) error
 	AddNodeTag(nodeName, tag string) error
 	RemoveNodeTag(nodeName, tag string) error
+	EnableDiskScheduling(nodeName, diskID string) error
+	DisableDiskScheduling(nodeName, diskID string) error
 }
 
 // VolumeInterface defines volume operations

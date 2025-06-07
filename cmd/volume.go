@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -10,6 +11,11 @@ import (
 	"github.com/pascal71/lhcli/pkg/client"
 	"github.com/pascal71/lhcli/pkg/formatter"
 	"github.com/pascal71/lhcli/pkg/utils"
+)
+
+var (
+	showReplicas bool // Flag to show replica locations
+	showFullIDs  bool // Flag to show full IDs without abbreviation
 )
 
 var volumeCmd = &cobra.Command{
@@ -56,6 +62,12 @@ func init() {
 	volumeCmd.AddCommand(volumeDeleteCmd)
 	volumeCmd.AddCommand(volumeGetCmd)
 
+	// Volume list flags
+	volumeListCmd.Flags().
+		BoolVarP(&showReplicas, "show-replicas", "r", false, "Show replica locations (nodes and disk paths)")
+	volumeListCmd.Flags().
+		BoolVar(&showFullIDs, "full-ids", false, "Show full disk IDs and replica names without abbreviation")
+
 	// Volume create flags
 	volumeCreateCmd.Flags().String("size", "10Gi", "Volume size")
 	volumeCreateCmd.Flags().Int("replicas", 3, "Number of replicas")
@@ -70,6 +82,8 @@ func init() {
 
 	// Volume get flags
 	volumeGetCmd.Flags().Bool("detailed", false, "Show detailed information")
+	volumeGetCmd.Flags().
+		BoolVar(&showFullIDs, "full-ids", false, "Show full disk IDs and replica names without abbreviation")
 }
 
 func runVolumeList(cmd *cobra.Command, args []string) error {
@@ -83,6 +97,42 @@ func runVolumeList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to list volumes: %w", err)
 	}
 
+	// If show-replicas flag is set, fetch node information
+	if showReplicas && (output == "table" || output == "wide" || output == "") {
+		// Fetch all nodes to get disk path information
+		nodes, err := c.Nodes().List()
+		if err != nil {
+			// Don't fail completely, just warn
+			fmt.Fprintf(
+				cmd.ErrOrStderr(),
+				"Warning: failed to fetch node information for disk paths: %v\n",
+				err,
+			)
+		} else {
+			// Create a map for quick lookup of disk paths by node and disk ID
+			diskPathMap := make(map[string]map[string]string) // nodeName -> diskID -> path
+			for _, node := range nodes {
+				if diskPathMap[node.Name] == nil {
+					diskPathMap[node.Name] = make(map[string]string)
+				}
+				for diskID, disk := range node.Disks {
+					diskPathMap[node.Name][diskID] = disk.Path
+				}
+			}
+
+			// Enrich volume data with disk paths
+			for i := range volumes {
+				for j := range volumes[i].Replicas {
+					if paths, ok := diskPathMap[volumes[i].Replicas[j].NodeID]; ok {
+						if path, ok := paths[volumes[i].Replicas[j].DiskID]; ok {
+							volumes[i].Replicas[j].DiskPath = path
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Handle output format
 	switch output {
 	case "json":
@@ -90,8 +140,14 @@ func runVolumeList(cmd *cobra.Command, args []string) error {
 	case "yaml":
 		return formatter.NewYAMLFormatter().Format(volumes)
 	case "wide":
+		if showReplicas {
+			return printVolumesWideWithReplicas(volumes)
+		}
 		return printVolumesWide(volumes)
 	default:
+		if showReplicas {
+			return printVolumesWithReplicas(volumes)
+		}
 		return printVolumesTable(volumes)
 	}
 }
@@ -232,9 +288,15 @@ func printVolumesWide(volumes []client.Volume) error {
 			robustness = "Unknown"
 		}
 
+		// Convert size to human readable if it's a number
+		size := volume.Size
+		if sizeInt, err := strconv.ParseInt(volume.Size, 10, 64); err == nil {
+			size = utils.FormatSize(sizeInt)
+		}
+
 		formatter.AddRow([]string{
 			volume.Name,
-			volume.Size,
+			size,
 			fmt.Sprintf("%d", volume.NumberOfReplicas),
 			state,
 			robustness,
@@ -247,9 +309,147 @@ func printVolumesWide(volumes []client.Volume) error {
 	return formatter.Format(nil)
 }
 
+// Print volumes with detailed replica information
+func printVolumesWithReplicas(volumes []client.Volume) error {
+	for i, volume := range volumes {
+		if i > 0 {
+			fmt.Println() // Add blank line between volumes
+		}
+
+		// Print volume header
+		fmt.Printf("Volume: %s\n", volume.Name)
+
+		// Convert size to human readable if it's a number
+		size := volume.Size
+		if sizeInt, err := strconv.ParseInt(volume.Size, 10, 64); err == nil {
+			size = utils.FormatSize(sizeInt)
+		}
+
+		fmt.Printf("  Size: %s, Replicas: %d, State: %s, Robustness: %s\n",
+			size,
+			volume.NumberOfReplicas,
+			getVolumeState(volume),
+			volume.Robustness)
+
+		// Print replica locations
+		if len(volume.Replicas) > 0 {
+			fmt.Println("  Replica Locations:")
+
+			// Create a formatter for the replica table
+			headers := []string{"REPLICA NAME", "NODE", "DISK ID", "DISK PATH", "MODE"}
+			replicaFormatter := formatter.NewTableFormatter(headers)
+
+			for _, replica := range volume.Replicas {
+				diskPath := replica.DiskPath
+				if diskPath == "" {
+					diskPath = "<unknown>"
+				}
+
+				replicaFormatter.AddRow([]string{
+					shortenReplicaName(replica.Name),
+					replica.NodeID,
+					shortenDiskID(replica.DiskID),
+					diskPath,
+					replica.Mode,
+				})
+			}
+
+			// Print with indent
+			// Use a string builder to capture the formatter output
+			var sb strings.Builder
+			replicaFormatter.Format(&sb)
+			output := sb.String()
+			lines := strings.Split(output, "\n")
+			for _, line := range lines {
+				if line != "" && strings.TrimSpace(line) != "" {
+					fmt.Printf("  %s\n", line)
+				}
+			}
+		} else {
+			fmt.Println("  Replica Locations: <none>")
+		}
+	}
+
+	return nil
+}
+
+// Print volumes in wide format with replica information
+func printVolumesWideWithReplicas(volumes []client.Volume) error {
+	headers := []string{
+		"NAME",
+		"SIZE",
+		"REPLICAS",
+		"STATE",
+		"ROBUSTNESS",
+		"FRONTEND",
+		"ACCESS",
+		"REPLICA LOCATIONS",
+		"CREATED",
+	}
+	formatter := formatter.NewTableFormatter(headers)
+
+	for _, volume := range volumes {
+		// Build replica locations string
+		replicaLocations := ""
+		if len(volume.Replicas) > 0 {
+			locations := []string{}
+			for _, replica := range volume.Replicas {
+				location := fmt.Sprintf("%s:%s", replica.NodeID, replica.DiskPath)
+				if replica.DiskPath == "" {
+					diskID := replica.DiskID
+					if !showFullIDs {
+						diskID = shortenDiskID(replica.DiskID)
+					}
+					location = fmt.Sprintf("%s:%s", replica.NodeID, diskID)
+				}
+				locations = append(locations, location)
+			}
+			replicaLocations = strings.Join(locations, ", ")
+			// Truncate if too long and not showing full IDs
+			if !showFullIDs && len(replicaLocations) > 50 {
+				replicaLocations = replicaLocations[:47] + "..."
+			}
+		} else {
+			replicaLocations = "<none>"
+		}
+
+		// Convert size to human readable if it's a number
+		size := volume.Size
+		if sizeInt, err := strconv.ParseInt(volume.Size, 10, 64); err == nil {
+			size = utils.FormatSize(sizeInt)
+		}
+
+		formatter.AddRow([]string{
+			volume.Name,
+			size,
+			fmt.Sprintf("%d", volume.NumberOfReplicas),
+			getVolumeState(volume),
+			volume.Robustness,
+			volume.Frontend,
+			volume.AccessMode,
+			replicaLocations,
+			formatTime(volume.Created),
+		})
+	}
+
+	return formatter.Format(nil)
+}
+
 func printVolumeDetails(volume *client.Volume, detailed bool) error {
 	fmt.Printf("Name:              %s\n", volume.Name)
-	fmt.Printf("Size:              %s\n", volume.Size)
+
+	// Convert size to human readable if it's a number
+	size := volume.Size
+	if sizeInt, err := strconv.ParseInt(volume.Size, 10, 64); err == nil {
+		size = utils.FormatSize(sizeInt)
+	}
+	fmt.Printf("Size:              %s\n", size)
+
+	// Show actual size if available
+	if volume.ActualSize > 0 {
+		fmt.Printf("Actual Size:       %s\n", utils.FormatSize(volume.ActualSize))
+	}
+
 	fmt.Printf("Number of Replicas: %d\n", volume.NumberOfReplicas)
 	fmt.Printf("State:             %s\n", getVolumeState(*volume))
 	fmt.Printf("Robustness:        %s\n", volume.Robustness)
@@ -285,12 +485,63 @@ func printVolumeDetails(volume *client.Volume, detailed bool) error {
 
 	if detailed && len(volume.Replicas) > 0 {
 		fmt.Println("\nReplicas:")
+
+		// Calculate per-replica size if we have actual size
+		var perReplicaSize int64
+		if volume.ActualSize > 0 && len(volume.Replicas) > 0 {
+			perReplicaSize = volume.ActualSize
+		}
+
 		for _, replica := range volume.Replicas {
-			fmt.Printf("  %s:\n", replica.Name)
+			replicaName := replica.Name
+			diskID := replica.DiskID
+
+			// Apply abbreviation unless --full-ids is set
+			if !showFullIDs {
+				replicaName = shortenReplicaName(replica.Name)
+				if len(diskID) > 20 {
+					diskID = shortenDiskID(replica.DiskID)
+				}
+			}
+
+			fmt.Printf("  %s:\n", replicaName)
 			fmt.Printf("    Node:   %s\n", replica.NodeID)
 			fmt.Printf("    Mode:   %s\n", replica.Mode)
 			if replica.DiskID != "" {
-				fmt.Printf("    Disk:   %s\n", replica.DiskID)
+				fmt.Printf("    Disk:   %s\n", diskID)
+			}
+			if replica.DiskPath != "" {
+				fmt.Printf("    Path:   %s\n", replica.DiskPath)
+			}
+
+			// Show size information
+			if replica.SpecSize != "" {
+				specSize := replica.SpecSize
+				// Convert to human readable if it's a number
+				if specSizeInt, err := strconv.ParseInt(replica.SpecSize, 10, 64); err == nil {
+					specSize = utils.FormatSize(specSizeInt)
+				}
+				fmt.Printf("    Size (Allocated): %s\n", specSize)
+			}
+
+			// Show estimated actual size per replica
+			if perReplicaSize > 0 {
+				fmt.Printf("    Size (Estimated): %s\n", utils.FormatSize(perReplicaSize))
+			}
+		}
+
+		// Show total consumed size
+		if volume.ActualSize > 0 && len(volume.Replicas) > 0 {
+			totalConsumed := volume.ActualSize * int64(len(volume.Replicas))
+			fmt.Printf("\nStorage Summary:\n")
+			fmt.Printf("  Volume Actual Size: %s\n", utils.FormatSize(volume.ActualSize))
+			fmt.Printf("  Total Consumed:     %s (across %d replicas)\n",
+				utils.FormatSize(totalConsumed), len(volume.Replicas))
+
+			// Show efficiency if we have spec size
+			if specSizeInt, err := strconv.ParseInt(volume.Size, 10, 64); err == nil {
+				efficiency := float64(volume.ActualSize) / float64(specSizeInt) * 100
+				fmt.Printf("  Space Efficiency:   %.1f%% of allocated\n", efficiency)
 			}
 		}
 	}
@@ -312,4 +563,40 @@ func getVolumeState(volume client.Volume) string {
 	}
 
 	return "Detached"
+}
+
+// Helper function to shorten replica names for better display
+func shortenReplicaName(name string) string {
+	// If the name is very long (like pvc-xxx-r-xxx), shorten it
+	if len(name) > 40 {
+		parts := strings.Split(name, "-")
+		if len(parts) > 3 {
+			// Keep first part and last 2 parts
+			return fmt.Sprintf("%s...%s-%s", parts[0], parts[len(parts)-2], parts[len(parts)-1])
+		}
+	}
+	return name
+}
+
+// Helper function to shorten disk IDs for better display
+func shortenDiskID(diskID string) string {
+	// If it's a UUID-like string, shorten it
+	if len(diskID) > 20 && strings.Count(diskID, "-") >= 4 {
+		parts := strings.Split(diskID, "-")
+		if len(parts) >= 5 {
+			// Show first and last part of UUID
+			return fmt.Sprintf("%s...%s", parts[0], parts[len(parts)-1])
+		}
+	}
+	return diskID
+}
+
+// Helper function to format time strings
+func formatTime(timeStr string) string {
+	// For now, just return the time string
+	// TODO: Parse and format nicely (e.g., "2d ago")
+	if len(timeStr) > 19 {
+		return timeStr[:19] // Return just YYYY-MM-DDTHH:MM:SS
+	}
+	return timeStr
 }
