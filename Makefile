@@ -11,7 +11,7 @@ LDFLAGS=-ldflags "-X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE}"
 all: build
 
 build: ## Build the binary
-       go build ${LDFLAGS} -o ${BINARY_NAME}
+	go build ${LDFLAGS} -o ${BINARY_NAME}
 
 install: ## Install the binary
 	go install ${LDFLAGS}
