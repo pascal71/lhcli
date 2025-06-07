@@ -91,19 +91,6 @@ func FormatMap(m map[string]string) string {
 	return strings.Join(pairs, ", ")
 }
 
-// TruncateString truncates a string to a maximum length
-func TruncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-
-	if maxLen <= 3 {
-		return s[:maxLen]
-	}
-
-	return s[:maxLen-3] + "..."
-}
-
 // FormatPercent formats a percentage value
 func FormatPercent(value, total float64) string {
 	if total == 0 {
