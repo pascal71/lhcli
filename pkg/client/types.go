@@ -134,17 +134,19 @@ type Controller struct {
 }
 
 // Replica represents a volume replica
+// Replica represents a volume replica
 type Replica struct {
 	Name            string            `json:"name"`
 	NodeID          string            `json:"nodeID"`
 	DiskID          string            `json:"diskID"`
 	VolumeName      string            `json:"volumeName"`
-	DiskPath        string            `json:"diskPath,omitempty"` // Add this field
+	DiskPath        string            `json:"diskPath,omitempty"`
 	DataPath        string            `json:"dataPath"`
 	Mode            string            `json:"mode"`
 	FailedAt        string            `json:"failedAt"`
 	Running         bool              `json:"running"`
-	SpecSize        string            `json:"specSize"`
+	SpecSize        string            `json:"specSize"`   // Keep for API compatibility
+	VolumeSize      string            `json:"volumeSize"` // K8s CRD field
 	ActualSize      string            `json:"actualSize"`
 	IP              string            `json:"ip"`
 	Port            int               `json:"port"`
@@ -154,6 +156,8 @@ type Replica struct {
 	StoragePort     int               `json:"storagePort"`
 	DataEngine      string            `json:"dataEngine"`
 	Conditions      map[string]Status `json:"conditions"`
+	CurrentState    string            `json:"currentState"` // K8s status field
+	CurrentImage    string            `json:"currentImage"` // K8s status field
 }
 
 // Setting represents a Longhorn setting

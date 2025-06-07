@@ -168,7 +168,35 @@ func runReplicaDelete(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Helper functions for printing
+// Helper functions
+
+// getReplicaSize returns the size from either VolumeSize or SpecSize fields
+func getReplicaSize(replica *client.Replica) string {
+	// Try VolumeSize first (Kubernetes CRD field)
+	if replica.VolumeSize != "" {
+		return replica.VolumeSize
+	}
+	// Fall back to SpecSize (potential API field)
+	if replica.SpecSize != "" {
+		return replica.SpecSize
+	}
+	return ""
+}
+
+// getReplicaState returns the state from either CurrentState or Mode fields
+func getReplicaState(replica *client.Replica) string {
+	// Try CurrentState first (Kubernetes CRD field)
+	if replica.CurrentState != "" {
+		return replica.CurrentState
+	}
+	// Fall back to Mode (potential API field)
+	if replica.Mode != "" {
+		return replica.Mode
+	}
+	return "unknown"
+}
+
+// Printing functions
 
 func printReplicasTable(replicas []client.Replica, showFullIDs bool) error {
 	headers := []string{"NAME", "VOLUME", "NODE", "DISK PATH", "SIZE", "STATE"}
@@ -185,9 +213,11 @@ func printReplicasTable(replicas []client.Replica, showFullIDs bool) error {
 			volumeName = volumeName[:27] + "..."
 		}
 
-		size := replica.SpecSize
-		if sizeInt, err := strconv.ParseInt(replica.SpecSize, 10, 64); err == nil {
-			size = utils.FormatSize(sizeInt)
+		size := getReplicaSize(&replica)
+		if size != "" && size != "0" {
+			if sizeInt, err := strconv.ParseInt(size, 10, 64); err == nil {
+				size = utils.FormatSize(sizeInt)
+			}
 		}
 
 		formatter.AddRow([]string{
@@ -196,7 +226,7 @@ func printReplicasTable(replicas []client.Replica, showFullIDs bool) error {
 			replica.NodeID,
 			replica.DiskPath,
 			size,
-			replica.Mode,
+			getReplicaState(&replica),
 		})
 	}
 
@@ -218,9 +248,11 @@ func printReplicasWide(replicas []client.Replica, showFullIDs bool) error {
 	formatter := formatter.NewTableFormatter(headers)
 
 	for _, replica := range replicas {
-		size := replica.SpecSize
-		if sizeInt, err := strconv.ParseInt(replica.SpecSize, 10, 64); err == nil {
-			size = utils.FormatSize(sizeInt)
+		size := getReplicaSize(&replica)
+		if size != "" && size != "0" {
+			if sizeInt, err := strconv.ParseInt(size, 10, 64); err == nil {
+				size = utils.FormatSize(sizeInt)
+			}
 		}
 
 		diskID := replica.DiskID
@@ -235,7 +267,7 @@ func printReplicasWide(replicas []client.Replica, showFullIDs bool) error {
 			diskID,
 			replica.DiskPath,
 			size,
-			replica.Mode,
+			getReplicaState(&replica),
 			fmt.Sprintf("%v", replica.Running),
 			replica.IP,
 		})
@@ -257,18 +289,21 @@ func printReplicaDetails(replica *client.Replica, showFullIDs bool) error {
 
 	fmt.Printf("Disk Path:         %s\n", replica.DiskPath)
 	fmt.Printf("Data Path:         %s\n", replica.DataPath)
-	fmt.Printf("State:             %s\n", replica.Mode)
+	fmt.Printf("State:             %s\n", getReplicaState(replica))
 	fmt.Printf("Running:           %v\n", replica.Running)
 
-	if replica.SpecSize != "" {
-		size := replica.SpecSize
-		if sizeInt, err := strconv.ParseInt(replica.SpecSize, 10, 64); err == nil {
+	// Display size information
+	replicaSize := getReplicaSize(replica)
+	if replicaSize != "" && replicaSize != "0" {
+		size := replicaSize
+		if sizeInt, err := strconv.ParseInt(replicaSize, 10, 64); err == nil {
 			size = utils.FormatSize(sizeInt)
 		}
-		fmt.Printf("Size (Specified):  %s\n", size)
+		fmt.Printf("Size:              %s\n", size)
 	}
 
-	if replica.ActualSize != "" {
+	// Display actual size if available
+	if replica.ActualSize != "" && replica.ActualSize != "0" {
 		size := replica.ActualSize
 		if sizeInt, err := strconv.ParseInt(replica.ActualSize, 10, 64); err == nil {
 			size = utils.FormatSize(sizeInt)
@@ -289,8 +324,16 @@ func printReplicaDetails(replica *client.Replica, showFullIDs bool) error {
 		fmt.Printf("Image:             %s\n", replica.Image)
 	}
 
+	if replica.CurrentImage != "" && replica.CurrentImage != replica.Image {
+		fmt.Printf("Current Image:     %s\n", replica.CurrentImage)
+	}
+
 	if replica.FailedAt != "" {
 		fmt.Printf("Failed At:         %s\n", replica.FailedAt)
+	}
+
+	if replica.DataEngine != "" {
+		fmt.Printf("Data Engine:       %s\n", replica.DataEngine)
 	}
 
 	return nil
