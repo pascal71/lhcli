@@ -1,0 +1,32 @@
+# Example lhcli configuration file
+# Copy to ~/.lhcli/config.yaml and modify as needed
+
+contexts:
+  - name: production
+    endpoint: https://longhorn.prod.example.com
+    namespace: longhorn-system
+    auth:
+      type: kubeconfig
+      path: ~/.kube/config
+      
+  - name: staging
+    endpoint: https://longhorn.staging.example.com
+    namespace: longhorn-system
+    auth:
+      type: token
+      token: your-bearer-token-here
+      
+  - name: local
+    endpoint: http://localhost:8080
+    namespace: longhorn-system
+    auth:
+      type: kubeconfig
+      path: ~/.kube/config
+
+current-context: local
+
+defaults:
+  output-format: table
+  confirmation: true
+  timeout: 30s
+  page-size: 50
