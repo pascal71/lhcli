@@ -1,14 +1,15 @@
-// cmd/volume.go
 package cmd
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+
 	"github.com/pascal71/lhcli/pkg/client"
 	"github.com/pascal71/lhcli/pkg/formatter"
 	"github.com/pascal71/lhcli/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 var volumeCmd = &cobra.Command{
@@ -192,9 +193,15 @@ func printVolumesTable(volumes []client.Volume) error {
 			robustness = "Unknown"
 		}
 
+		// Convert size to human readable if it's a number
+		size := volume.Size
+		if sizeInt, err := strconv.ParseInt(volume.Size, 10, 64); err == nil {
+			size = utils.FormatSize(sizeInt)
+		}
+
 		formatter.AddRow([]string{
 			volume.Name,
-			volume.Size,
+			size,
 			fmt.Sprintf("%d", volume.NumberOfReplicas),
 			state,
 			robustness,

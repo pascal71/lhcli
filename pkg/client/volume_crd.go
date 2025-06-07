@@ -8,6 +8,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/pascal71/lhcli/pkg/utils"
 )
 
 // volumeClient implementation for CRDs
@@ -65,6 +67,12 @@ func (c *crdVolumeClient) Get(name string) (*Volume, error) {
 func (c *crdVolumeClient) Create(input *VolumeCreateInput) (*Volume, error) {
 	debugLog("Creating Longhorn volume %s via CRD", input.Name)
 
+	// Parse size string to bytes
+	sizeBytes, err := utils.ParseSize(input.Size)
+	if err != nil {
+		return nil, fmt.Errorf("invalid size: %w", err)
+	}
+
 	// Create unstructured volume
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(schema.GroupVersionKind{
@@ -77,7 +85,10 @@ func (c *crdVolumeClient) Create(input *VolumeCreateInput) (*Volume, error) {
 
 	// Set spec
 	spec := map[string]interface{}{
-		"size":             input.Size,
+		"size": fmt.Sprintf(
+			"%d",
+			sizeBytes,
+		), // Convert to string representation of bytes
 		"numberOfReplicas": int64(input.NumberOfReplicas), // Convert to int64
 	}
 
