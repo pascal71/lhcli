@@ -385,19 +385,6 @@ func (c *crdNodeClient) EvictNode(name string) error {
 	return err
 }
 
-func (c *crdNodeClient) AddDisk(nodeName string, disk DiskUpdate) error {
-	// This would need more complex implementation
-	return fmt.Errorf("not implemented for CRD client")
-}
-
-func (c *crdNodeClient) RemoveDisk(nodeName, diskID string) error {
-	return fmt.Errorf("not implemented for CRD client")
-}
-
-func (c *crdNodeClient) UpdateDiskTags(nodeName, diskID string, tags []string) error {
-	return fmt.Errorf("not implemented for CRD client")
-}
-
 func (c *crdNodeClient) AddNodeTag(nodeName, tag string) error {
 	node, err := c.Get(nodeName)
 	if err != nil {
