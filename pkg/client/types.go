@@ -138,6 +138,7 @@ type Replica struct {
 	Name            string            `json:"name"`
 	NodeID          string            `json:"nodeID"`
 	DiskID          string            `json:"diskID"`
+	VolumeName      string            `json:"volumeName"`
 	DiskPath        string            `json:"diskPath,omitempty"` // Add this field
 	DataPath        string            `json:"dataPath"`
 	Mode            string            `json:"mode"`

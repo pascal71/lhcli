@@ -1,0 +1,4 @@
+# Add new disks to each node (example paths - adjust as needed)
+./lhcli node disk add k3sc004n05 --path  /longhorn/lh00 --tags data
+./lhcli node disk add k3sc004n06 --path  /longhorn/lh00 --tags data
+./lhcli node disk add rpb58-n34 --path  /longhorn/lh00 --tags data

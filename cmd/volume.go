@@ -55,12 +55,21 @@ var volumeGetCmd = &cobra.Command{
 	RunE:  runVolumeGet,
 }
 
+var volumeUpdateCmd = &cobra.Command{
+	Use:   "update [name]",
+	Short: "Update volume configuration",
+	Long:  `Update a Longhorn volume's configuration such as replica count, access mode, etc.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  runVolumeUpdate,
+}
+
 func init() {
 	rootCmd.AddCommand(volumeCmd)
 	volumeCmd.AddCommand(volumeListCmd)
 	volumeCmd.AddCommand(volumeCreateCmd)
 	volumeCmd.AddCommand(volumeDeleteCmd)
 	volumeCmd.AddCommand(volumeGetCmd)
+	volumeCmd.AddCommand(volumeUpdateCmd)
 
 	// Volume list flags
 	volumeListCmd.Flags().
@@ -84,6 +93,12 @@ func init() {
 	volumeGetCmd.Flags().Bool("detailed", false, "Show detailed information")
 	volumeGetCmd.Flags().
 		BoolVar(&showFullIDs, "full-ids", false, "Show full disk IDs and replica names without abbreviation")
+
+	// Volume update flags
+	volumeUpdateCmd.Flags().Int("replicas", 0, "Number of replicas (0 means no change)")
+	volumeUpdateCmd.Flags().String("access-mode", "", "Access mode (rwo|rwx)")
+	volumeUpdateCmd.Flags().
+		String("data-locality", "", "Data locality (disabled|best-effort|strict-local)")
 }
 
 func runVolumeList(cmd *cobra.Command, args []string) error {
@@ -185,6 +200,64 @@ func runVolumeCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("✓ Volume %s created successfully\n", volume.Name)
+	return nil
+}
+
+func runVolumeUpdate(cmd *cobra.Command, args []string) error {
+	volumeName := args[0]
+
+	replicas, _ := cmd.Flags().GetInt("replicas")
+	accessMode, _ := cmd.Flags().GetString("access-mode")
+	dataLocality, _ := cmd.Flags().GetString("data-locality")
+
+	// Check if any updates were specified
+	if replicas == 0 && accessMode == "" && dataLocality == "" {
+		return fmt.Errorf("no updates specified. Use --replicas, --access-mode, or --data-locality")
+	}
+
+	c, err := getClient()
+	if err != nil {
+		return err
+	}
+
+	// Build update input
+	update := &client.VolumeUpdateInput{}
+
+	if replicas > 0 {
+		update.NumberOfReplicas = &replicas
+	}
+	if accessMode != "" {
+		update.AccessMode = accessMode
+	}
+	if dataLocality != "" {
+		update.DataLocality = dataLocality
+	}
+
+	// Perform the update
+	volume, err := c.Volumes().Update(volumeName, update)
+	if err != nil {
+		return fmt.Errorf("failed to update volume: %w", err)
+	}
+
+	fmt.Printf("✓ Volume %s updated successfully\n", volume.Name)
+
+	// Show what was updated
+	if replicas > 0 {
+		fmt.Printf("  Replicas: %d\n", replicas)
+	}
+	if accessMode != "" {
+		fmt.Printf("  Access Mode: %s\n", accessMode)
+	}
+	if dataLocality != "" {
+		fmt.Printf("  Data Locality: %s\n", dataLocality)
+	}
+
+	// Optionally show the current state
+	if !quiet {
+		fmt.Println("\nCurrent volume state:")
+		return printVolumeDetails(volume, false)
+	}
+
 	return nil
 }
 

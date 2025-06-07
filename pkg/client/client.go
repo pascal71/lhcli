@@ -200,3 +200,20 @@ type EventInterface interface {
 	List(opts EventListOptions) ([]Event, error)
 	Watch(ctx context.Context, opts EventListOptions, callback func(Event)) error
 }
+
+// ReplicaInterface defines replica operations
+type ReplicaInterface interface {
+	List() ([]Replica, error)
+	Get(name string) (*Replica, error)
+	Delete(name string) error
+}
+
+// Replicas returns the replica interface
+func (c *Client) Replicas() ReplicaInterface {
+	// If we have a CRD client, use it
+	if c.crdClient != nil {
+		return &crdReplicaClient{crdClient: c.crdClient}
+	}
+	// Otherwise use the HTTP client
+	return &replicaClient{client: c}
+}

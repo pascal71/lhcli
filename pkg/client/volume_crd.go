@@ -241,7 +241,7 @@ func (c *crdVolumeClient) Update(name string, update *VolumeUpdateInput) (*Volum
 
 	// Apply updates
 	if update.NumberOfReplicas != nil {
-		spec["numberOfReplicas"] = *update.NumberOfReplicas
+		spec["numberOfReplicas"] = int64(*update.NumberOfReplicas)
 	}
 	if update.DataLocality != "" {
 		spec["dataLocality"] = update.DataLocality
