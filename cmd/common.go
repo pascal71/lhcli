@@ -18,7 +18,7 @@ func getClient() (*client.Client, error) {
 	}
 
 	// Get current context
-	ctx, err := cfg.GetContext(context)
+	ctx, err := cfg.GetContext(ctxName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get context: %w", err)
 	}
@@ -77,7 +77,7 @@ func getKubeClient() (*kubernetes.Clientset, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	ctx, err := cfg.GetContext(context)
+	ctx, err := cfg.GetContext(ctxName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get context: %w", err)
 	}

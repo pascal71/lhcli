@@ -15,7 +15,7 @@ var (
     verbose   bool
     quiet     bool
     dryRun    bool
-    context   string
+    ctxName   string
 )
 
 var rootCmd = &cobra.Command{
@@ -34,7 +34,7 @@ func init() {
     
     // Global flags
     rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.lhcli/config.yaml)")
-    rootCmd.PersistentFlags().StringVar(&context, "context", "", "context to use from the config file")
+    rootCmd.PersistentFlags().StringVar(&ctxName, "context", "", "context to use from the config file")
     rootCmd.PersistentFlags().StringVarP(&namespace, "namespace", "n", "longhorn-system", "Longhorn namespace")
     rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "table", "Output format (table|json|yaml|wide)")
     rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
