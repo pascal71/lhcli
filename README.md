@@ -104,6 +104,15 @@ lhcli monitor nodes
 lhcli monitor events --follow
 ```
 
+### Troubleshooting
+
+```bash
+# Run troubleshooting checks
+lhcli troubleshoot
+```
+
+This command inspects nodes, replicas and disks to report common issues such as orphaned replicas or low disk space.
+
 ## Development
 
 ### Building
