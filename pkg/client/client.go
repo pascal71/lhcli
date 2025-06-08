@@ -143,6 +143,14 @@ func (c *Client) Events() EventInterface {
 	return &eventClient{client: c}
 }
 
+// Snapshots returns the snapshot interface
+func (c *Client) Snapshots() SnapshotInterface {
+	if c.crdClient != nil {
+		return &crdSnapshotClient{crdClient: c.crdClient}
+	}
+	return &snapshotClient{client: c}
+}
+
 // NodeInterface defines node operations
 type NodeInterface interface {
 	List() ([]Node, error)
@@ -186,6 +194,13 @@ type BackupInterface interface {
 	Delete(backupName string) error
 	GetTarget() (*BackupTarget, error)
 	SetTarget(target *BackupTarget) error
+}
+
+// SnapshotInterface defines snapshot operations
+type SnapshotInterface interface {
+	List(volumeName string) ([]Snapshot, error)
+	Create(volumeName string, input *SnapshotCreateInput) (*Snapshot, error)
+	Delete(volumeName, snapshotName string) error
 }
 
 // EngineImageInterface defines engine image operations
