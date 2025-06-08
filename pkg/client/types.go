@@ -160,6 +160,23 @@ type Replica struct {
 	CurrentImage    string            `json:"currentImage"` // K8s status field
 }
 
+// Snapshot represents a volume snapshot
+type Snapshot struct {
+	Name        string            `json:"name"`
+	Parent      string            `json:"parent"`
+	Created     string            `json:"created"`
+	Size        string            `json:"size"`
+	Labels      map[string]string `json:"labels"`
+	Removed     bool              `json:"removed"`
+	UserCreated bool              `json:"usercreated"`
+}
+
+// SnapshotCreateInput represents snapshot creation parameters
+type SnapshotCreateInput struct {
+	Name   string            `json:"name"`
+	Labels map[string]string `json:"labels"`
+}
+
 // Setting represents a Longhorn setting
 type Setting struct {
 	Name       string            `json:"name"`
