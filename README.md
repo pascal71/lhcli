@@ -8,6 +8,7 @@ A comprehensive command-line interface for managing Longhorn storage system.
 - Snapshot and backup operations
 - Node and disk management
 - Real-time monitoring
+- Map Kubernetes PVs to Longhorn volumes and vice versa
 - Multiple output formats (table, JSON, YAML)
 - Context-based configuration
 - Batch operations support
@@ -102,6 +103,16 @@ lhcli monitor nodes
 
 # Follow events
 lhcli monitor events --follow
+```
+
+### PV and Volume Mapping
+
+```bash
+# Map a Longhorn volume to its Kubernetes PV
+lhcli volume map my-volume
+
+# Map Kubernetes PVs to Longhorn volumes
+lhcli pv map
 ```
 
 ## Development

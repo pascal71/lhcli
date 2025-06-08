@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/pascal71/lhcli/pkg/client"
 	"github.com/pascal71/lhcli/pkg/formatter"
 	"github.com/pascal71/lhcli/pkg/utils"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -63,6 +66,13 @@ var volumeUpdateCmd = &cobra.Command{
 	RunE:  runVolumeUpdate,
 }
 
+var volumeMapCmd = &cobra.Command{
+	Use:   "map [volume-name]",
+	Short: "Map Longhorn volumes to Kubernetes PVs",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runVolumeMap,
+}
+
 func init() {
 	rootCmd.AddCommand(volumeCmd)
 	volumeCmd.AddCommand(volumeListCmd)
@@ -70,6 +80,7 @@ func init() {
 	volumeCmd.AddCommand(volumeDeleteCmd)
 	volumeCmd.AddCommand(volumeGetCmd)
 	volumeCmd.AddCommand(volumeUpdateCmd)
+	volumeCmd.AddCommand(volumeMapCmd)
 
 	// Volume list flags
 	volumeListCmd.Flags().
@@ -306,6 +317,77 @@ func runVolumeGet(cmd *cobra.Command, args []string) error {
 		return formatter.NewYAMLFormatter().Format(volume)
 	default:
 		return printVolumeDetails(volume, detailed)
+	}
+}
+
+func runVolumeMap(cmd *cobra.Command, args []string) error {
+	c, err := getClient()
+	if err != nil {
+		return err
+	}
+
+	kubeClient, err := getKubeClient()
+	if err != nil {
+		return err
+	}
+
+	volumes, err := c.Volumes().List()
+	if err != nil {
+		return fmt.Errorf("failed to list volumes: %w", err)
+	}
+
+	pvs, err := kubeClient.CoreV1().PersistentVolumes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list persistent volumes: %w", err)
+	}
+
+	filter := ""
+	if len(args) == 1 {
+		filter = args[0]
+	}
+
+	pvMap := make(map[string]*v1.PersistentVolume)
+	for _, pv := range pvs.Items {
+		if pv.Spec.CSI != nil && pv.Spec.CSI.Driver == "driver.longhorn.io" {
+			pvMap[pv.Spec.CSI.VolumeHandle] = &pv
+		}
+	}
+
+	type mapping struct {
+		Volume    string `json:"volume"`
+		PV        string `json:"pv,omitempty"`
+		PVC       string `json:"pvc,omitempty"`
+		Namespace string `json:"namespace,omitempty"`
+	}
+
+	var result []mapping
+	for _, v := range volumes {
+		if filter != "" && v.Name != filter {
+			continue
+		}
+		m := mapping{Volume: v.Name}
+		if pv, ok := pvMap[v.Name]; ok {
+			m.PV = pv.Name
+			if pv.Spec.ClaimRef != nil {
+				m.PVC = pv.Spec.ClaimRef.Name
+				m.Namespace = pv.Spec.ClaimRef.Namespace
+			}
+		}
+		result = append(result, m)
+	}
+
+	switch output {
+	case "json":
+		return formatter.NewJSONFormatter(true).Format(result)
+	case "yaml":
+		return formatter.NewYAMLFormatter().Format(result)
+	default:
+		headers := []string{"VOLUME", "PV", "PVC", "NAMESPACE"}
+		table := formatter.NewTableFormatter(headers)
+		for _, m := range result {
+			table.AddRow([]string{m.Volume, m.PV, m.PVC, m.Namespace})
+		}
+		return table.Format(nil)
 	}
 }
 
