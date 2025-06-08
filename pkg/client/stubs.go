@@ -51,21 +51,6 @@ type settingsClient struct {
 	client *Client
 }
 
-func (s *settingsClient) List() (map[string]Setting, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (s *settingsClient) Get(name string) (*Setting, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (s *settingsClient) Update(name string, value string) (*Setting, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented")
-}
-
 // backupClient implements BackupInterface
 type backupClient struct {
 	client *Client
@@ -104,21 +89,6 @@ func (b *backupClient) SetTarget(target *BackupTarget) error {
 // engineImageClient implements EngineImageInterface
 type engineImageClient struct {
 	client *Client
-}
-
-func (e *engineImageClient) List() ([]EngineImage, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (e *engineImageClient) Get(name string) (*EngineImage, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (e *engineImageClient) Delete(name string) error {
-	// TODO: Implement
-	return fmt.Errorf("not implemented")
 }
 
 // eventClient implements EventInterface
