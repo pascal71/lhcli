@@ -6,6 +6,7 @@ import (
 
 	"github.com/pascal71/lhcli/pkg/client"
 	"github.com/pascal71/lhcli/pkg/config"
+	"k8s.io/client-go/kubernetes"
 )
 
 // getClient creates a client based on the current configuration
@@ -67,4 +68,33 @@ func getClient() (*client.Client, error) {
 	default:
 		return nil, fmt.Errorf("unsupported auth type: %s", ctx.Auth.Type)
 	}
+}
+
+// getKubeClient creates a Kubernetes clientset using kubeconfig from the current context
+func getKubeClient() (*kubernetes.Clientset, error) {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	ctx, err := cfg.GetContext(context)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get context: %w", err)
+	}
+
+	if ctx.Auth.Type != "kubeconfig" {
+		return nil, fmt.Errorf("kubeconfig auth required for Kubernetes operations")
+	}
+
+	kubeConfig := &client.KubeConfig{
+		ConfigPath: ctx.Auth.Path,
+		Context:    ctx.Auth.Context,
+		Namespace:  namespace,
+	}
+
+	clientset, _, err := client.NewKubeClient(kubeConfig)
+	if err != nil {
+		return nil, err
+	}
+	return clientset, nil
 }
